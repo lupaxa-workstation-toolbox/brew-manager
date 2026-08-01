@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+
+pause()
+{
+    printf "\nPress Enter to continue..."
+    read -r _
+}
+
+confirm()
+{
+    printf "%s [y/N]: " "$1"
+    read -r answer
+
+    case "$answer" in
+        y|Y|yes|YES)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+run_cmd()
+{
+    printf "\n==> %s\n\n" "$*"
+    "$@"
+    pause
+}
+
+check_brew()
+{
+    if ! command -v brew >/dev/null 2>&1; then
+        printf "Error: brew was not found in PATH.\n"
+        exit 1
+    fi
+}
+
+list_deprecated_disabled_casks()
+{
+    printf "\nDeprecated/disabled installed casks:\n\n"
+
+    found=0
+
+    for cask in $(brew list --cask); do
+        if brew info --cask "$cask" 2>/dev/null | grep -qiE 'deprecated|disabled'; then
+            printf "  %s\n" "$cask"
+            found=1
+        fi
+    done
+
+    if [ "$found" -eq 0 ]; then
+        printf "  None found.\n"
+    fi
+
+    pause
+}
+
+remove_cask()
+{
+    printf "Cask name to uninstall: "
+    read -r cask
+
+    if [ -z "$cask" ]; then
+        printf "No cask entered.\n"
+        pause
+        return
+    fi
+
+    if confirm "Uninstall cask '$cask'?"; then
+        run_cmd brew uninstall --cask "$cask"
+    fi
+}
+
+remove_all_deprecated_disabled_casks()
+{
+    casks=""
+
+    for cask in $(brew list --cask); do
+        if brew info --cask "$cask" 2>/dev/null | grep -qiE 'deprecated|disabled'; then
+            casks="${casks} ${cask}"
+        fi
+    done
+
+    casks=$(printf "%s" "$casks" | xargs)
+
+    if [ -z "$casks" ]; then
+        printf "\nNo deprecated or disabled casks found.\n"
+        pause
+        return
+    fi
+
+    printf "\nThe following deprecated/disabled casks will be removed:\n\n"
+
+    for cask in $casks; do
+        printf "  %s\n" "$cask"
+    done
+
+    printf "\n"
+
+    if confirm "Continue and uninstall all listed casks?"; then
+        for cask in $casks; do
+            printf "\n==> Removing %s\n" "$cask"
+            brew uninstall --cask "$cask"
+        done
+
+        printf "\nCompleted.\n"
+    fi
+
+    pause
+}
+
+full_safe_run()
+{
+    run_cmd brew update
+    run_cmd brew outdated
+    run_cmd brew outdated --cask
+    run_cmd brew autoremove --dry-run
+    run_cmd brew cleanup --dry-run
+    run_cmd brew doctor
+}
+
+main_menu()
+{
+    clear
+    printf "Homebrew Maintenance Menu\n"
+    printf "=========================\n\n"
+    printf "  1) brew update\n"
+    printf "  2) brew outdated\n"
+    printf "  3) brew outdated --cask\n"
+    printf "  4) brew upgrade\n"
+    printf "  5) brew upgrade --cask\n"
+    printf "  6) brew autoremove --dry-run\n"
+    printf "  7) brew autoremove\n"
+    printf "  8) brew cleanup --dry-run\n"
+    printf "  9) brew cleanup\n"
+    printf " 10) brew doctor\n"
+    printf " 11) list installed formulae\n"
+    printf " 12) list installed casks\n"
+    printf " 13) list deprecated/disabled casks\n"
+    printf " 14) uninstall a cask\n"
+    printf " 15) remove all deprecated/disabled casks\n"
+    printf " 16) full safe maintenance run\n"
+    printf "\n"
+    printf "  Q) quit\n\n"
+    printf "Select an option: "
+}
+
+main()
+{
+    check_brew
+
+    while true; do
+        main_menu
+        read -r choice
+
+        case "$choice" in
+            1) run_cmd brew update ;;
+            2) run_cmd brew outdated ;;
+            3) run_cmd brew outdated --cask ;;
+            4)
+                if confirm "Run brew upgrade?"; then
+                    run_cmd brew upgrade
+                fi
+                ;;
+            5)
+                if confirm "Run brew upgrade --cask?"; then
+                    run_cmd brew upgrade --cask
+                fi
+                ;;
+            6) run_cmd brew autoremove --dry-run ;;
+            7)
+                if confirm "Run brew autoremove?"; then
+                    run_cmd brew autoremove
+                fi
+                ;;
+            8) run_cmd brew cleanup --dry-run ;;
+            9)
+                if confirm "Run brew cleanup?"; then
+                    run_cmd brew cleanup
+                fi
+                ;;
+            10) run_cmd brew doctor ;;
+            11) run_cmd brew list --formula ;;
+            12) run_cmd brew list --cask ;;
+            13) list_deprecated_disabled_casks ;;
+            14) remove_cask ;;
+            15) remove_all_deprecated_disabled_casks ;;
+            16) full_safe_run ;;
+            q|Q|quit|QUIT|Quit)
+                printf "Goodbye.\n"
+                exit 0
+                ;;
+            *)
+                printf "Invalid option: %s\n" "$choice"
+                pause
+                ;;
+        esac
+    done
+}
+
+main "$@"
