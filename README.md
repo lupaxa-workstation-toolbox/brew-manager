@@ -73,25 +73,25 @@ After most commands finish, press **Enter** to return to the menu.
 
 ### Menu reference
 
-| Option | What it runs | Notes |
-| :----- | :----------- | :---- |
-| `1` | `brew update` | Refresh Homebrew and formula/cask metadata |
-| `2` | `brew outdated` | List outdated formulae |
-| `3` | `brew outdated --cask` | List outdated casks |
-| `4` | `brew upgrade` | Confirms before upgrading formulae |
-| `5` | `brew upgrade --cask` | Confirms before upgrading casks |
-| `6` | `brew autoremove --dry-run` | Preview unused dependency removals |
-| `7` | `brew autoremove` | Confirms before removing unused deps |
-| `8` | `brew cleanup --dry-run` | Preview cache / old-version cleanup |
-| `9` | `brew cleanup` | Confirms before cleaning up |
-| `10` | `brew doctor` | Run Homebrew diagnostics |
-| `11` | `brew list --formula` | List installed formulae |
-| `12` | `brew list --cask` | List installed casks |
-| `13` | *(custom)* | Scan installed casks for `deprecated` / `disabled` in `brew info` |
-| `14` | `brew uninstall --cask <name>` | Prompts for cask name, then confirms |
-| `15` | *(custom)* | Lists matching deprecated/disabled casks, then confirms bulk uninstall |
-| `16` | *(custom)* | Safe maintenance sequence (see below) |
-| `Q` | — | Quit |
+| Option | What it runs                   | Notes                                                                  |
+| :----- | :----------------------------- | :--------------------------------------------------------------------- |
+| `1`    | `brew update`                  | Refresh Homebrew and formula/cask metadata                             |
+| `2`    | `brew outdated`                | List outdated formulae                                                 |
+| `3`    | `brew outdated --cask`         | List outdated casks                                                    |
+| `4`    | `brew upgrade`                 | Confirms before upgrading formulae                                     |
+| `5`    | `brew upgrade --cask`          | Confirms before upgrading casks                                        |
+| `6`    | `brew autoremove --dry-run`    | Preview unused dependency removals                                     |
+| `7`    | `brew autoremove`              | Confirms before removing unused deps                                   |
+| `8`    | `brew cleanup --dry-run`       | Preview cache / old-version cleanup                                    |
+| `9`    | `brew cleanup`                 | Confirms before cleaning up                                            |
+| `10`   | `brew doctor`                  | Run Homebrew diagnostics                                               |
+| `11`   | `brew list --formula`          | List installed formulae                                                |
+| `12`   | `brew list --cask`             | List installed casks                                                   |
+| `13`   | *(custom)*                     | Scan installed casks for `deprecated` / `disabled` in `brew info`      |
+| `14`   | `brew uninstall --cask <name>` | Prompts for cask name, then confirms                                   |
+| `15`   | *(custom)*                     | Lists matching deprecated/disabled casks, then confirms bulk uninstall |
+| `16`   | *(custom)*                     | Safe maintenance sequence (see below)                                  |
+| `Q`    | —                              | Quit                                                                   |
 
 ### Full safe maintenance run (option 16)
 
