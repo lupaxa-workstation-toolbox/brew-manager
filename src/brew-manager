@@ -1,0 +1,672 @@
+#!/usr/bin/env bash
+#
+# brew-manager — interactive Homebrew maintenance menu for workstation brew state.
+#
+# Requirements:
+#   - Homebrew on PATH
+#   - Bash (macOS /bin/bash 3.2+ is fine)
+#
+# Usage:
+#   ./src/brew-manager              # interactive menu
+#   ./src/brew-manager --help       # flags
+#   ./src/brew-manager --safe-run   # non-interactive safe maintenance
+#
+# Menu overview: update / outdated / upgrade / list / remove / cleanup /
+# doctor / export / full safe run. See README.md for the full numbered list
+# and CLI flag reference.
+#
+
+set -euo pipefail
+
+# 1 = menu mode (pause after commands); 0 = flag mode (no pauses)
+INTERACTIVE=1
+YES=0
+ACTION=""
+EXPORT_PATH=""
+UNINSTALL_NAME=""
+
+# pause — wait for Enter before returning to the menu; exit 0 on EOF.
+pause()
+{
+    printf "\nPress Enter to continue..."
+    if ! read -r _; then
+        printf "\nEOF; exiting.\n"
+        exit 0
+    fi
+}
+
+# confirm MESSAGE — return 0 on y/yes, 1 otherwise (default N).
+confirm()
+{
+    local answer
+    printf "%s [y/N]: " "$1"
+    read -r answer || true
+    case "${answer}" in
+        y|Y|yes|YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# run_cmd ARGS… — print, execute, show status if non-zero; return the command status.
+run_cmd()
+{
+    local status=0
+    printf "\n==> %s\n\n" "$*"
+    "$@" || status=$?
+    if [ "${status}" -ne 0 ]; then
+        printf "\nCommand exited with status %s.\n" "${status}"
+    fi
+    if [ "${INTERACTIVE}" -eq 1 ]; then
+        pause
+    fi
+    return "${status}"
+}
+
+# check_brew — ensure brew is on PATH.
+check_brew()
+{
+    if ! command -v brew >/dev/null 2>&1; then
+        printf "Error: brew was not found in PATH.\n" >&2
+        exit 1
+    fi
+}
+
+DEPRECATED_CASKS=()
+
+# list_installed_casks — emit installed cask names, one per line.
+list_installed_casks()
+{
+    brew list --cask
+}
+
+# cask_is_deprecated_or_disabled NAME — 0 if deprecated or disabled per JSON.
+# Uses grep on brew info --json=v2 output (boolean true only; no jq/python).
+cask_is_deprecated_or_disabled()
+{
+    local name="$1"
+    local json
+    json="$(brew info --json=v2 --cask "${name}" 2>/dev/null)" || return 1
+    printf '%s' "${json}" | grep -qE '"deprecated"[[:space:]]*:[[:space:]]*true|"disabled"[[:space:]]*:[[:space:]]*true'
+}
+
+# collect_deprecated_disabled_casks — populate DEPRECATED_CASKS array.
+collect_deprecated_disabled_casks()
+{
+    local cask
+    DEPRECATED_CASKS=()
+    while IFS= read -r cask; do
+        [ -z "${cask}" ] && continue
+        if cask_is_deprecated_or_disabled "${cask}"; then
+            DEPRECATED_CASKS+=("${cask}")
+        fi
+    done < <(list_installed_casks)
+}
+
+# list_deprecated_disabled_casks — print installed casks marked deprecated or disabled.
+list_deprecated_disabled_casks()
+{
+    local cask
+
+    printf "\nDeprecated/disabled installed casks:\n\n"
+
+    collect_deprecated_disabled_casks
+
+    if [ "${#DEPRECATED_CASKS[@]}" -eq 0 ]; then
+        printf "  None found.\n"
+    else
+        for cask in "${DEPRECATED_CASKS[@]}"; do
+            printf "  %s\n" "${cask}"
+        done
+    fi
+
+    if [ "${INTERACTIVE}" -eq 1 ]; then
+        pause
+    fi
+    return 0
+}
+
+# remove_cask — prompt for a cask name and uninstall it after confirm.
+remove_cask()
+{
+    local cask status=0
+
+    printf "Cask name to uninstall: "
+    read -r cask || true
+
+    if [ -z "${cask}" ]; then
+        printf "No cask entered.\n"
+        if [ "${INTERACTIVE}" -eq 1 ]; then
+            pause
+        fi
+        return 0
+    fi
+
+    if confirm "Uninstall cask '${cask}'?"; then
+        printf "\n==> brew uninstall --cask %s\n\n" "${cask}"
+        brew uninstall --cask "${cask}" || status=$?
+        if [ "${status}" -ne 0 ]; then
+            printf "\nCommand exited with status %s.\n" "${status}"
+        fi
+    fi
+
+    if [ "${INTERACTIVE}" -eq 1 ]; then
+        pause
+    fi
+    return 0
+}
+
+# remove_all_deprecated_disabled_casks — uninstall every deprecated/disabled cask (confirm in menu).
+remove_all_deprecated_disabled_casks()
+{
+    local cask status=0
+
+    collect_deprecated_disabled_casks
+
+    if [ "${#DEPRECATED_CASKS[@]}" -eq 0 ]; then
+        printf "\nNo deprecated or disabled casks found.\n"
+        if [ "${INTERACTIVE}" -eq 1 ]; then
+            pause
+        fi
+        return 0
+    fi
+
+    printf "\nThe following deprecated/disabled casks will be removed:\n\n"
+
+    for cask in "${DEPRECATED_CASKS[@]}"; do
+        printf "  %s\n" "${cask}"
+    done
+
+    printf "\n"
+
+    # Flag mode already required --yes; menu mode still prompts.
+    if [ "${INTERACTIVE}" -eq 0 ] || confirm "Continue and uninstall all listed casks?"; then
+        for cask in "${DEPRECATED_CASKS[@]}"; do
+            status=0
+            printf "\n==> Removing %s\n" "${cask}"
+            brew uninstall --cask "${cask}" || status=$?
+            if [ "${status}" -ne 0 ]; then
+                printf "\nCommand exited with status %s.\n" "${status}"
+            fi
+        done
+
+        printf "\nCompleted.\n"
+    fi
+
+    if [ "${INTERACTIVE}" -eq 1 ]; then
+        pause
+    fi
+    return 0
+}
+
+# leaves_orphan_preview — show brew leaves and a dry-run of autoremove.
+leaves_orphan_preview()
+{
+    printf "\n==> brew leaves\n\n"
+    brew leaves || true
+    printf "\n==> brew autoremove --dry-run\n\n"
+    brew autoremove --dry-run || true
+    if [ "${INTERACTIVE}" -eq 1 ]; then
+        pause
+    fi
+    return 0
+}
+
+# export_installed_lists [PATH] — write installed formulae and casks via a temp file.
+export_installed_lists()
+{
+    local out="${1:-}"
+    local dir tmp
+
+    if [ -z "${out}" ]; then
+        dir="./exports"
+        out="${dir}/brew-list-$(date +%Y%m%d-%H%M%S).txt"
+    else
+        dir="$(dirname "${out}")"
+    fi
+
+    if ! mkdir -p "${dir}"; then
+        printf "Error: could not create directory %s.\n" "${dir}" >&2
+        if [ "${INTERACTIVE}" -eq 1 ]; then
+            pause
+        fi
+        return 1
+    fi
+
+    tmp="$(mktemp "${dir}/.brew-list.XXXXXX")" || {
+        printf "Error: could not create a temporary export file.\n" >&2
+        if [ "${INTERACTIVE}" -eq 1 ]; then
+            pause
+        fi
+        return 1
+    }
+
+    # Subshell so a failing brew list does not abort under set -e with a truncated dest.
+    if ! (
+        printf '# Formulae\n'
+        brew list --formula
+        printf '\n# Casks\n'
+        brew list --cask
+    ) > "${tmp}"; then
+        rm -f "${tmp}"
+        printf "Error: failed to list installed packages (brew list).\n" >&2
+        if [ "${INTERACTIVE}" -eq 1 ]; then
+            pause
+        fi
+        return 1
+    fi
+
+    if ! mv "${tmp}" "${out}"; then
+        rm -f "${tmp}"
+        printf "Error: could not write %s.\n" "${out}" >&2
+        if [ "${INTERACTIVE}" -eq 1 ]; then
+            pause
+        fi
+        return 1
+    fi
+
+    printf "Wrote %s\n" "${out}"
+    if [ "${INTERACTIVE}" -eq 1 ]; then
+        pause
+    fi
+    return 0
+}
+
+# upgrade_cask_greedy — run brew upgrade --cask --greedy (propagates status).
+upgrade_cask_greedy()
+{
+    run_cmd brew upgrade --cask --greedy
+}
+
+# full_safe_run — non-destructive update/outdated/dry-run/doctor sequence.
+full_safe_run()
+{
+    local status=0
+    run_cmd brew update || status=$?
+    run_cmd brew outdated || status=$?
+    run_cmd brew outdated --cask || status=$?
+    run_cmd brew autoremove --dry-run || status=$?
+    run_cmd brew cleanup --dry-run || status=$?
+    run_cmd brew doctor || status=$?
+    return "${status}"
+}
+
+# usage — print CLI help to stdout.
+usage()
+{
+    cat <<'EOF'
+Usage: brew-manager [options]
+
+  (no options)     Interactive menu
+
+  -h, --help
+  --update
+  --outdated
+  --outdated-cask
+  --upgrade                 (requires --yes)
+  --upgrade-cask            (requires --yes)
+  --upgrade-cask-greedy     (requires --yes)
+  --list-formula
+  --list-cask
+  --leaves-preview
+  --list-deprecated
+  --uninstall-cask NAME     (requires --yes)
+  --remove-deprecated-casks (requires --yes)
+  --autoremove-dry-run
+  --autoremove              (requires --yes)
+  --cleanup-dry-run
+  --cleanup                 (requires --yes)
+  --doctor
+  --export [PATH]
+  --safe-run
+  -y, --yes
+EOF
+}
+
+# require_yes — exit 2 unless --yes / -y was given.
+require_yes()
+{
+    if [ "${YES}" -ne 1 ]; then
+        printf "Error: destructive action requires --yes\n" >&2
+        exit 2
+    fi
+}
+
+# set_action NAME — record the sole action flag; reject a second action.
+set_action()
+{
+    if [ -n "${ACTION}" ]; then
+        printf "Error: only one action flag is allowed per run.\n" >&2
+        usage >&2
+        exit 2
+    fi
+    ACTION="$1"
+}
+
+# parse_and_dispatch ARGS… — parse flags and run one action.
+# Returns 1 if no args (caller runs menu); 0 if handled.
+parse_and_dispatch()
+{
+    if [ "$#" -eq 0 ]; then
+        return 1
+    fi
+
+    YES=0
+    ACTION=""
+    EXPORT_PATH=""
+    UNINSTALL_NAME=""
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -h|--help)
+                set_action help
+                shift
+                ;;
+            -y|--yes)
+                YES=1
+                shift
+                ;;
+            --update)
+                set_action update
+                shift
+                ;;
+            --outdated)
+                set_action outdated
+                shift
+                ;;
+            --outdated-cask)
+                set_action outdated_cask
+                shift
+                ;;
+            --upgrade)
+                set_action upgrade
+                shift
+                ;;
+            --upgrade-cask)
+                set_action upgrade_cask
+                shift
+                ;;
+            --upgrade-cask-greedy)
+                set_action upgrade_cask_greedy
+                shift
+                ;;
+            --list-formula)
+                set_action list_formula
+                shift
+                ;;
+            --list-cask)
+                set_action list_cask
+                shift
+                ;;
+            --leaves-preview)
+                set_action leaves_preview
+                shift
+                ;;
+            --list-deprecated)
+                set_action list_deprecated
+                shift
+                ;;
+            --uninstall-cask)
+                set_action uninstall_cask
+                shift
+                if [ "$#" -eq 0 ]; then
+                    printf "Error: --uninstall-cask requires a NAME.\n" >&2
+                    usage >&2
+                    exit 2
+                fi
+                case "$1" in
+                    -*)
+                        printf "Error: --uninstall-cask requires a NAME.\n" >&2
+                        usage >&2
+                        exit 2
+                        ;;
+                esac
+                UNINSTALL_NAME="$1"
+                shift
+                ;;
+            --remove-deprecated-casks)
+                set_action remove_deprecated_casks
+                shift
+                ;;
+            --autoremove-dry-run)
+                set_action autoremove_dry_run
+                shift
+                ;;
+            --autoremove)
+                set_action autoremove
+                shift
+                ;;
+            --cleanup-dry-run)
+                set_action cleanup_dry_run
+                shift
+                ;;
+            --cleanup)
+                set_action cleanup
+                shift
+                ;;
+            --doctor)
+                set_action doctor
+                shift
+                ;;
+            --export)
+                set_action export
+                shift
+                if [ "$#" -gt 0 ]; then
+                    case "$1" in
+                        -*) ;;
+                        *)
+                            EXPORT_PATH="$1"
+                            shift
+                            ;;
+                    esac
+                fi
+                ;;
+            --safe-run)
+                set_action safe_run
+                shift
+                ;;
+            *)
+                printf "Error: unknown option: %s\n" "$1" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+    done
+
+    if [ -z "${ACTION}" ]; then
+        printf "Error: no action flag given.\n" >&2
+        usage >&2
+        exit 2
+    fi
+
+    case "${ACTION}" in
+        help)
+            usage
+            ;;
+        update)
+            run_cmd brew update
+            ;;
+        outdated)
+            run_cmd brew outdated
+            ;;
+        outdated_cask)
+            run_cmd brew outdated --cask
+            ;;
+        upgrade)
+            require_yes
+            run_cmd brew upgrade
+            ;;
+        upgrade_cask)
+            require_yes
+            run_cmd brew upgrade --cask
+            ;;
+        upgrade_cask_greedy)
+            require_yes
+            upgrade_cask_greedy
+            ;;
+        list_formula)
+            run_cmd brew list --formula
+            ;;
+        list_cask)
+            run_cmd brew list --cask
+            ;;
+        leaves_preview)
+            leaves_orphan_preview
+            ;;
+        list_deprecated)
+            list_deprecated_disabled_casks
+            ;;
+        uninstall_cask)
+            require_yes
+            run_cmd brew uninstall --cask "${UNINSTALL_NAME}"
+            ;;
+        remove_deprecated_casks)
+            require_yes
+            remove_all_deprecated_disabled_casks
+            ;;
+        autoremove_dry_run)
+            run_cmd brew autoremove --dry-run
+            ;;
+        autoremove)
+            require_yes
+            run_cmd brew autoremove
+            ;;
+        cleanup_dry_run)
+            run_cmd brew cleanup --dry-run
+            ;;
+        cleanup)
+            require_yes
+            run_cmd brew cleanup
+            ;;
+        safe_run)
+            full_safe_run
+            ;;
+        doctor)
+            run_cmd brew doctor
+            ;;
+        export)
+            export_installed_lists "${EXPORT_PATH}"
+            ;;
+        *)
+            printf "Error: unhandled action: %s\n" "${ACTION}" >&2
+            exit 2
+            ;;
+    esac
+}
+
+# dispatch_flags ARGS… — flag-mode entry (parse_and_dispatch).
+dispatch_flags()
+{
+    parse_and_dispatch "$@"
+}
+
+# main_menu — print the numbered interactive Homebrew maintenance menu.
+main_menu()
+{
+    clear || true
+    printf "Homebrew Maintenance Menu\n"
+    printf "=========================\n\n"
+    printf "  1) brew update\n"
+    printf "  2) brew outdated\n"
+    printf "  3) brew outdated --cask\n"
+    printf "  4) brew upgrade\n"
+    printf "  5) brew upgrade --cask\n"
+    printf "  6) brew upgrade --cask --greedy\n"
+    printf "  7) list installed formulae\n"
+    printf "  8) list installed casks\n"
+    printf "  9) leaves / orphan preview\n"
+    printf " 10) list deprecated/disabled casks\n"
+    printf " 11) uninstall a cask\n"
+    printf " 12) remove all deprecated/disabled casks\n"
+    printf " 13) brew autoremove --dry-run\n"
+    printf " 14) brew autoremove\n"
+    printf " 15) brew cleanup --dry-run\n"
+    printf " 16) brew cleanup\n"
+    printf " 17) brew doctor\n"
+    printf " 18) export installed lists\n"
+    printf " 19) full safe maintenance run\n"
+    printf "\n"
+    printf "  Q) quit\n\n"
+    printf "Select an option: "
+}
+
+# main ARGS… — honour --help before requiring brew; then menu or flag dispatch.
+main()
+{
+    local arg
+    for arg in "$@"; do
+        case "${arg}" in
+            -h|--help)
+                usage
+                exit 0
+                ;;
+        esac
+    done
+
+    check_brew
+
+    if [ "$#" -eq 0 ]; then
+        INTERACTIVE=1
+        while true; do
+            main_menu
+            if ! read -r choice; then
+                printf "\nEOF; exiting.\n"
+                exit 0
+            fi
+
+            case "$choice" in
+                1) run_cmd brew update || true ;;
+                2) run_cmd brew outdated || true ;;
+                3) run_cmd brew outdated --cask || true ;;
+                4)
+                    if confirm "Run brew upgrade?"; then
+                        run_cmd brew upgrade || true
+                    fi
+                    ;;
+                5)
+                    if confirm "Run brew upgrade --cask?"; then
+                        run_cmd brew upgrade --cask || true
+                    fi
+                    ;;
+                6)
+                    if confirm "Run brew upgrade --cask --greedy?"; then
+                        upgrade_cask_greedy || true
+                    fi
+                    ;;
+                7) run_cmd brew list --formula || true ;;
+                8) run_cmd brew list --cask || true ;;
+                9) leaves_orphan_preview || true ;;
+                10) list_deprecated_disabled_casks || true ;;
+                11) remove_cask || true ;;
+                12) remove_all_deprecated_disabled_casks || true ;;
+                13) run_cmd brew autoremove --dry-run || true ;;
+                14)
+                    if confirm "Run brew autoremove?"; then
+                        run_cmd brew autoremove || true
+                    fi
+                    ;;
+                15) run_cmd brew cleanup --dry-run || true ;;
+                16)
+                    if confirm "Run brew cleanup?"; then
+                        run_cmd brew cleanup || true
+                    fi
+                    ;;
+                17) run_cmd brew doctor || true ;;
+                18) export_installed_lists || true ;;
+                19) full_safe_run || true ;;
+                q|Q|quit|QUIT|Quit)
+                    printf "Goodbye.\n"
+                    exit 0
+                    ;;
+                *)
+                    printf "Invalid option: %s\n" "$choice"
+                    pause
+                    ;;
+            esac
+        done
+    else
+        INTERACTIVE=0
+        dispatch_flags "$@"
+    fi
+}
+
+main "$@"

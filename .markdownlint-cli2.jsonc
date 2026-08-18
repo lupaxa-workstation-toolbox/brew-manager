@@ -1,0 +1,16 @@
+{
+  // Used by the VS Code / Cursor markdownlint extension (Problems panel).
+  // Rule config continues to come from .markdownlint.yml.
+  // Positive globs are required — a config that only lists ignores matches nothing,
+  // so the extension falls back to strict defaults (MD033/MD041/MD013@80).
+  "globs": [
+    "**/*.md"
+  ],
+  "ignores": [
+    "cursor-docs/**",
+    "site/**",
+    ".makefiles/**",
+    ".superpowers/**",
+    "**/node_modules/**"
+  ]
+}
