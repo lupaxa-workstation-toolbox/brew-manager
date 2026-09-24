@@ -47,7 +47,7 @@ python -m pip install -r requirements.txt
 python -m mkdocs serve
 ```
 
-Open the URL MkDocs prints (usually `http://127.0.0.1:8000/`).
+Connect to the URL that MkDocs prints.
 
 With the `mkdocs` makefile skill enabled, `make update` then
 `make mkdocs-serve` serves the same site.

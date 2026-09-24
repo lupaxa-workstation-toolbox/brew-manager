@@ -4,7 +4,7 @@
     </a>
 </p>
 
-<h1 align="center">brew-manager</h1>
+<h1 align="center">Brew Manager</h1>
 
 Interactive Homebrew maintenance menu for workstation brew state. Run common
 `brew` operations from a numbered menu — updates, upgrades, cleanup, doctor,
