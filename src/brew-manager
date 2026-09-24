@@ -12,8 +12,8 @@
 #   ./src/brew-manager --safe-run   # non-interactive safe maintenance
 #
 # Menu overview: update / outdated / upgrade / list / remove / cleanup /
-# doctor / export / full safe run. See README.md for the full numbered list
-# and CLI flag reference.
+# doctor / export / full safe run. The numbered list and flag reference are
+# in mkdocs/reference.md.
 #
 
 set -euo pipefail

@@ -4,3 +4,4 @@ cursor-docs/
 .makefiles/
 .superpowers/
 **/node_modules/
+.venv/
