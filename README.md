@@ -22,7 +22,15 @@ actions for scripting.
 
 ## Quick start
 
-Clone the repository, then run the script:
+With Homebrew:
+
+```bash
+brew tap the-lupaxa-project/tap
+brew trust the-lupaxa-project/tap
+brew install brew-manager
+```
+
+Or clone the repository and run the script:
 
 ```bash
 git clone git@github.com:lupaxa-workstation-toolbox/brew-manager.git
@@ -30,8 +38,7 @@ cd brew-manager
 ./src/brew-manager
 ```
 
-To run it from anywhere on `PATH`, copy or symlink into your personal `bin`
-(no Makefile install or Homebrew formula in this repo):
+To run a checkout from anywhere on `PATH`, copy or symlink into your personal `bin`:
 
 ```bash
 cp /path/to/brew-manager/src/brew-manager ~/bin/brew-manager

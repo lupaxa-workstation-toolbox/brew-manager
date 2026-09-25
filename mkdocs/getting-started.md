@@ -6,11 +6,17 @@
 - Bash (macOS `/bin/bash` 3.2 or newer is fine)
 - A terminal (the menu clears the screen and pauses after each command)
 
-There is no Homebrew formula and no `make install` target in this repository.
-
 ## Install
 
-Clone the repository, then run the script:
+With Homebrew:
+
+```bash
+brew tap the-lupaxa-project/tap
+brew trust the-lupaxa-project/tap
+brew install brew-manager
+```
+
+Or clone the repository and run the script:
 
 ```bash
 git clone git@github.com:lupaxa-workstation-toolbox/brew-manager.git
