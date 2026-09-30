@@ -13,7 +13,7 @@
 #
 # Menu overview: update / outdated / upgrade / list / remove / cleanup /
 # doctor / export / full safe run. The numbered list and flag reference are
-# in mkdocs/reference.md.
+# in README.md.
 #
 
 set -euo pipefail

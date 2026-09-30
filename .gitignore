@@ -13,9 +13,6 @@ exports/
 # Make
 .makefiles/
 
-# MkDocs
-site/
-
 # Python
 .venv/
 __pycache__/

@@ -8,7 +8,6 @@
   ],
   "ignores": [
     "cursor-docs/**",
-    "site/**",
     ".makefiles/**",
     ".superpowers/**",
     "**/node_modules/**",

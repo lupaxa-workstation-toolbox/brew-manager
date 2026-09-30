@@ -1,5 +1,4 @@
-# Generated / local-only — not part of the published site
-site/
+# Local-only
 cursor-docs/
 .makefiles/
 .superpowers/
